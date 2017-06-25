@@ -4,20 +4,17 @@ import pygame
 from cpu import CPU
 from screen import Screen
 
-# A simple timer event used for the delay and sound timers
 TIMER = pygame.USEREVENT + 1
-# The font file to use
 FONT_FILE = "FONTS.chip8"
-# Delay timer decrement interval (in ms)
 DELAY_INTERVAL = 17
 EXIT_STATE = 0x00FD
 
 
 def screen_cpu_connector(args):
     """
-    Runs the main emulator loop with the specified arguments.
+    This method runs the main emulator loop with the arguments.
 
-    :param args: the parsed command-line arguments
+    :param args: the parsed command-line arguments passed
     """
     project_screen = Screen(ratio=args.scale)
     project_screen.init_display()
@@ -31,7 +28,6 @@ def screen_cpu_connector(args):
         pygame.time.wait(args.op_delay)
         operand = project_cpu.cpu_execute_instruction()
 
-        # Check for events
         for event in pygame.event.get():
             if event.type == TIMER:
                 project_cpu.cpu_decrement_timers()
@@ -42,22 +38,21 @@ def screen_cpu_connector(args):
                 if keys_pressed[pygame.K_q]:
                     running = False
 
-        # Check to see if CPU is in exit state
         if operand == EXIT_STATE:
             running = False
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Starts a simple Chip 8 "
+        description="Initiates Chip-8 Processor"
                     )
     parser.add_argument(
-        "rom", help="the ROM file to load on startup")
+        "rom", help="The input ROM file")
     parser.add_argument(
-        "-s", help="the scale factor to apply to the display "
+        "-s", help="The scaling factor to be applied to the screen"
                    "(default is 5)", type=int, default=5, dest="scale")
     parser.add_argument(
-        "-d", help="sets the CPU operation to take at least "
-                   "the specified number of milliseconds to execute (default is 1)",
+        "-d", help="Sets the CPU to take exactly"
+                   "the specified delay in number of milliseconds to execute (default is 1)",
         type=int, default=1, dest="op_delay")
     screen_cpu_connector(parser.parse_args())

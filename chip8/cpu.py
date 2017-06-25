@@ -41,7 +41,7 @@ class CPU(object):
     """
     def __init__(self, screen):
         """
-        Class chip-8 constructor it initialize the processor.
+        Class chip-8 constructor. It initializes the processor.
 
         :param screen: the screen object is passed for the chip8 processor to draw on
         """
