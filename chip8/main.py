@@ -1,7 +1,7 @@
 import argparse
 import pygame
 
-from cpu import Chip8CPU
+from cpu import CPU
 from screen import Screen
 
 # A simple timer event used for the delay and sound timers
@@ -21,20 +21,20 @@ def screen_cpu_connector(args):
     """
     project_screen = Screen(ratio=args.scale)
     project_screen.init_display()
-    project_cpu = Chip8CPU(project_screen)
-    project_cpu.load_rom(FONT_FILE, 0)
-    project_cpu.load_rom(args.rom)
+    project_cpu = CPU(project_screen)
+    project_cpu.cpu_load_rom(FONT_FILE, 0)
+    project_cpu.cpu_load_rom(args.rom)
     pygame.time.set_timer(TIMER, DELAY_INTERVAL)
     running = True
 
     while running:
         pygame.time.wait(args.op_delay)
-        operand = project_cpu.execute_instruction()
+        operand = project_cpu.cpu_execute_instruction()
 
         # Check for events
         for event in pygame.event.get():
             if event.type == TIMER:
-                project_cpu.decrement_timers()
+                project_cpu.cpu_decrement_timers()
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:

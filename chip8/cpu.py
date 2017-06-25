@@ -1,15 +1,8 @@
-"""
-Copyright (C) 2012 Craig Thomas
-This project uses an MIT style license - see LICENSE for details.
-
-A Chip 8 CPU - see the README file for more information.
-"""
-# I M P O R T S ###############################################################
-
 import pygame
 from exception import UnknownOpCodeException
 from pygame import key
 from random import randint
+from addresses import *
 
 # The total amount of memory to allocate for the emulator
 MAX_MEMORY = 4096
@@ -40,8 +33,6 @@ KEY_MAPPINGS = {
     0xF: pygame.K_f,
 }
 
-# C O N S T A N T S ###########################################################
-
 # The total number of registers in the Chip 8 CPU
 NUM_REGISTERS = 0x10
 
@@ -52,7 +43,7 @@ MODE_EXTENDED = 'extended'
 # C L A S S E S ###############################################################
 
 
-class Chip8CPU(object):
+class CPU(object):
     """
     A class to emulate a Chip 8 CPU. There are several good resources out on
     the web that describe the internals of the Chip 8 CPU. For example:
@@ -83,14 +74,14 @@ class Chip8CPU(object):
         # There are two timer registers, one for sound and one that is general
         # purpose known as the delay timer. The timers are loaded with a value
         # and then decremented 60 times per second.
-        self.timers = {
+        self.cpu_timers = {
             'delay': 0,
             'sound': 0,
         }
 
         # Defines the general purpose, index, stack pointer and program
         # counter registers.
-        self.registers = {
+        self.cpu_registers = {
             'v': [],
             'index': 0,
             'sp': 0,
@@ -101,72 +92,72 @@ class Chip8CPU(object):
         # The operation_lookup table is executed according to the most
         # significant byte of the operand (e.g. operand 8nnn would call
         # self.execute_logical_instruction)
-        self.operation_lookup = {
-            0x0: self.clear_return,                  # 0nnn - SYS  nnn
-            0x1: self.jump_to_address,               # 1nnn - JUMP nnn
-            0x2: self.jump_to_subroutine,            # 2nnn - CALL nnn
-            0x3: self.skip_if_reg_equal_val,         # 3snn - SKE  Vs, nn
-            0x4: self.skip_if_reg_not_equal_val,     # 4snn - SKNE Vs, nn
-            0x5: self.skip_if_reg_equal_reg,         # 5st0 - SKE  Vs, Vt
-            0x6: self.move_value_to_reg,             # 6snn - LOAD Vs, nn
-            0x7: self.add_value_to_reg,              # 7snn - ADD  Vs, nn
-            0x8: self.execute_logical_instruction,   # see subfunctions below
-            0x9: self.skip_if_reg_not_equal_reg,     # 9st0 - SKNE Vs, Vt
-            0xA: self.load_index_reg_with_value,     # Annn - LOAD I, nnn
-            0xB: self.jump_to_index_plus_value,      # Bnnn - JUMP [I] + nnn
-            0xC: self.generate_random_number,        # Ctnn - RAND Vt, nn
-            0xD: self.draw_sprite,                   # Dstn - DRAW Vs, Vy, n
-            0xE: self.keyboard_routines,             # see subfunctions below
-            0xF: self.misc_routines,                 # see subfunctions below
+        self.cpu_operation_lookup = {
+            0x0: self.cpu_clear_return,                  # 0nnn - SYS  nnn
+            0x1: self.cpu_jump_to_address,               # 1nnn - JUMP nnn
+            0x2: self.cpu_jump_to_subroutine,            # 2nnn - CALL nnn
+            0x3: self.cpu_skip_if_reg_equal_val,         # 3snn - SKE  Vs, nn
+            0x4: self.cpu_skip_if_reg_not_equal_val,     # 4snn - SKNE Vs, nn
+            0x5: self.cpu_skip_if_reg_equal_reg,         # 5st0 - SKE  Vs, Vt
+            0x6: self.cpu_move_value_to_reg,             # 6snn - LOAD Vs, nn
+            0x7: self.cpu_add_value_to_reg,              # 7snn - ADD  Vs, nn
+            0x8: self.cpu_execute_logical_instruction,   # see subfunctions below
+            0x9: self.cpu_skip_if_reg_not_equal_reg,     # 9st0 - SKNE Vs, Vt
+            0xA: self.cpu_load_index_reg_with_value,     # Annn - LOAD I, nnn
+            0xB: self.cpu_jump_to_index_plus_value,      # Bnnn - JUMP [I] + nnn
+            0xC: self.cpu_generate_random_number,        # Ctnn - RAND Vt, nn
+            0xD: self.cpu_draw_sprite,                   # Dstn - DRAW Vs, Vy, n
+            0xE: self.cpu_keyboard_routines,             # see subfunctions below
+            0xF: self.cpu_misc_routines,                 # see subfunctions below
         }
 
         # This set of operations is invoked when the operand loaded into the
         # CPU starts with 8 (e.g. operand 8nn0 would call
         # self.move_reg_into_reg)
-        self.logical_operation_lookup = {
-            0x0: self.move_reg_into_reg,             # 8st0 - LOAD Vs, Vt
-            0x1: self.logical_or,                    # 8st1 - OR   Vs, Vt
-            0x2: self.logical_and,                   # 8st2 - AND  Vs, Vt
-            0x3: self.exclusive_or,                  # 8st3 - XOR  Vs, Vt
-            0x4: self.add_reg_to_reg,                # 8st4 - ADD  Vs, Vt
-            0x5: self.subtract_reg_from_reg,         # 8st5 - SUB  Vs, Vt
-            0x6: self.right_shift_reg,               # 8st6 - SHR  Vs
-            0x7: self.subtract_reg_from_reg1,        # 8st7 - SUBN Vs, Vt
-            0xE: self.left_shift_reg,                # 8stE - SHL  Vs
+        self.cpu_logical_operation_lookup = {
+            0x0: self.cpu_move_reg_into_reg,             # 8st0 - LOAD Vs, Vt
+            0x1: self.cpu_logical_or,                    # 8st1 - OR   Vs, Vt
+            0x2: self.cpu_logical_and,                   # 8st2 - AND  Vs, Vt
+            0x3: self.cpu_exclusive_or,                  # 8st3 - XOR  Vs, Vt
+            0x4: self.cpu_add_reg_to_reg,                # 8st4 - ADD  Vs, Vt
+            0x5: self.cpu_subtract_reg_from_reg,         # 8st5 - SUB  Vs, Vt
+            0x6: self.cpu_right_shift_reg,               # 8st6 - SHR  Vs
+            0x7: self.cpu_subtract_reg_from_reg1,        # 8st7 - SUBN Vs, Vt
+            0xE: self.cpu_left_shift_reg,                # 8stE - SHL  Vs
         }
 
         # This set of operations is invoked when the operand loaded into the
         # CPU starts with F (e.g. operand Fn07 would call
         # self.move_delay_timer_into_reg)
-        self.misc_routine_lookup = {
-            0x07: self.move_delay_timer_into_reg,            # Ft07 - LOAD Vt, DELAY
-            0x0A: self.wait_for_keypress,                    # Ft0A - KEYD Vt
-            0x15: self.move_reg_into_delay_timer,            # Fs15 - LOAD DELAY, Vs
-            0x18: self.move_reg_into_sound_timer,            # Fs18 - LOAD SOUND, Vs
-            0x1E: self.add_reg_into_index,                   # Fs1E - ADD  I, Vs
-            0x29: self.load_index_with_reg_sprite,           # Fs29 - LOAD I, Vs
-            0x30: self.load_index_with_extended_reg_sprite,  # Fs30 - LOAD I, Vs
-            0x33: self.store_bcd_in_memory,                  # Fs33 - BCD
-            0x55: self.store_regs_in_memory,                 # Fs55 - STOR [I], Vs
-            0x65: self.read_regs_from_memory,                # Fs65 - LOAD Vs, [I]
-            0x75: self.store_regs_in_rpl,                    # Fs75 - SRPL Vs
-            0x85: self.read_regs_from_rpl,                   # Fs85 - LRPL Vs
+        self.cpu_misc_routine_lookup = {
+            0x07: self.cpu_move_delay_timer_into_reg,            # Ft07 - LOAD Vt, DELAY
+            0x0A: self.cpu_wait_for_keypress,                    # Ft0A - KEYD Vt
+            0x15: self.cpu_move_reg_into_delay_timer,            # Fs15 - LOAD DELAY, Vs
+            0x18: self.cpu_move_reg_into_sound_timer,            # Fs18 - LOAD SOUND, Vs
+            0x1E: self.cpu_add_reg_into_index,                   # Fs1E - ADD  I, Vs
+            0x29: self.cpu_load_index_with_reg_sprite,           # Fs29 - LOAD I, Vs
+            0x30: self.cpu_load_index_with_extended_reg_sprite,  # Fs30 - LOAD I, Vs
+            0x33: self.cpu_store_bcd_in_memory,                  # Fs33 - BCD
+            0x55: self.cpu_store_regs_in_memory,                 # Fs55 - STOR [I], Vs
+            0x65: self.cpu_read_regs_from_memory,                # Fs65 - LOAD Vs, [I]
+            0x75: self.cpu_store_regs_in_rpl,                    # Fs75 - SRPL Vs
+            0x85: self.cpu_read_regs_from_rpl,                   # Fs85 - LRPL Vs
         }
-        self.operand = 0
-        self.mode = MODE_NORMAL
-        self.screen = screen
-        self.memory = bytearray(MAX_MEMORY)
-        self.reset()
+        self.cpu_operand = 0
+        self.cpu_mode = MODE_NORMAL
+        self.cpu_screen = screen
+        self.cpu_memory = bytearray(MAX_MEMORY)
+        self.cpu_reset()
 
     def __str__(self):
         val = 'PC: {:4X}  OP: {:4X}\n'.format(
-            self.registers['pc'] - 2, self.operand)
+            self.cpu_registers['pc'] - 2, self.operand)
         for index in range(0x10):
-            val += 'V{:X}: {:2X}\n'.format(index, self.registers['v'][index])
-        val += 'I: {:4X}\n'.format(self.registers['index'])
+            val += 'V{:X}: {:2X}\n'.format(index, self.cpu_registers['v'][index])
+        val += 'I: {:4X}\n'.format(self.cpu_registers['index'])
         return val
 
-    def execute_instruction(self, operand=None):
+    def cpu_execute_instruction(self, cpu_operator_param=None):
         """
         Execute the next instruction pointed to by the program counter.
         For testing purposes, pass the operand directly to the
@@ -176,29 +167,29 @@ class Chip8CPU(object):
         :param operand: the operand to execute
         :return: returns the operand executed
         """
-        if operand:
-            self.operand = operand
+        if cpu_operator_param:
+            self.cpu_operand = cpu_operator_param
         else:
-            self.operand = int(self.memory[self.registers['pc']])
-            self.operand <<= 8
-            self.operand += int(self.memory[self.registers['pc'] + 1])
-            self.registers['pc'] += 2
-        operation = (self.operand & 0xF000) >> 12
-        self.operation_lookup[operation]()
-        return self.operand
+            self.cpu_operand = int(self.cpu_memory[self.cpu_registers['pc']])
+            self.cpu_operand <<= 8
+            self.cpu_operand += int(self.cpu_memory[self.cpu_registers['pc'] + 1])
+            self.cpu_registers['pc'] += 2
+        cpu_operation = (self.cpu_operand & ADDRESS_1) >> 12
+        self.cpu_operation_lookup[cpu_operation]()
+        return self.cpu_operand
 
-    def execute_logical_instruction(self):
+    def cpu_execute_logical_instruction(self):
         """
         Execute the logical instruction based upon the current operand.
         For testing purposes, pass the operand directly to the function.
         """
-        operation = self.operand & 0x000F
+        cpu_operation = self.cpu_operand & ADDRESS_6
         try:
-            self.logical_operation_lookup[operation]()
+            self.cpu_logical_operation_lookup[cpu_operation]()
         except KeyError:
-            raise UnknownOpCodeException(self.operand)
+            raise UnknownOpCodeException(self.cpu_operand)
 
-    def keyboard_routines(self):
+    def cpu_keyboard_routines(self):
         """
         Run the specified keyboard routine based upon the operand. These
         operations are:
@@ -215,33 +206,33 @@ class Chip8CPU(object):
            Bits:  15-12    11-8      7-4      3-0
                   unused   source  9 or A    E or 1
         """
-        operation = self.operand & 0x00FF
-        source = (self.operand & 0x0F00) >> 8
+        cpu_operation = self.cpu_operand & ADDRESS_2
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
 
-        key_to_check = self.registers['v'][source]
-        keys_pressed = key.get_pressed()
+        cpu_key_to_check = self.cpu_registers['v'][cpu_source]
+        cpu_keys_pressed = key.get_pressed()
 
         # Skip if the key specified in the source register is pressed
-        if operation == 0x9E:
-            if keys_pressed[KEY_MAPPINGS[key_to_check]]:
-                self.registers['pc'] += 2
+        if cpu_operation == 0x9E:
+            if cpu_keys_pressed[KEY_MAPPINGS[cpu_key_to_check]]:
+                self.cpu_registers['pc'] += 2
 
         # Skip if the key specified in the source register is not pressed
-        if operation == 0xA1:
-            if not keys_pressed[KEY_MAPPINGS[key_to_check]]:
-                self.registers['pc'] += 2
+        if cpu_operation == 0xA1:
+            if not cpu_keys_pressed[KEY_MAPPINGS[cpu_key_to_check]]:
+                self.cpu_registers['pc'] += 2
 
-    def misc_routines(self):
+    def cpu_misc_routines(self):
         """
         Will execute one of the routines specified in misc_routines.
         """
-        operation = self.operand & 0x00FF
+        cpu_operation = self.cpu_operand & ADDRESS_2
         try:
-            self.misc_routine_lookup[operation]()
+            self.cpu_misc_routine_lookup[cpu_operation]()
         except KeyError:
-            raise UnknownOpCodeException(self.operand)
+            raise UnknownOpCodeException(self.cpu_operand)
 
-    def clear_return(self):
+    def cpu_clear_return(self):
         """
         Opcodes starting with a 0 are one of the following instructions:
 
@@ -255,39 +246,39 @@ class Chip8CPU(object):
             00FE - Disable extended mode
             00FF - Enable extended mode
         """
-        operation = self.operand & 0x00FF
-        sub_operation = operation & 0x00F0
-        if sub_operation == 0x00C0:
-            num_lines = self.operand & 0x000F
-            self.screen.scroll_screen_down(num_lines)
+        cpu_operation = self.cpu_operand & ADDRESS_2
+        cpu_sub_operation = cpu_operation & ADDRESS_4
+        if cpu_sub_operation == ADDRESS_5:
+            num_lines = self.cpu_operand & ADDRESS_6
+            self.cpu_screen.scroll_screen_down(num_lines)
 
-        if operation == 0x00E0:
-            self.screen.clear_screen()
+        if cpu_operation == ADDRESS_7:
+            self.cpu_screen.clear_screen()
 
-        if operation == 0x00EE:
-            self.registers['sp'] -= 1
-            self.registers['pc'] = self.memory[self.registers['sp']] << 8
-            self.registers['sp'] -= 1
-            self.registers['pc'] += self.memory[self.registers['sp']]
+        if cpu_operation == ADDRESS_8:
+            self.cpu_registers['sp'] -= 1
+            self.cpu_registers['pc'] = self.cpu_memory[self.cpu_registers['sp']] << 8
+            self.cpu_registers['sp'] -= 1
+            self.cpu_registers['pc'] += self.cpu_memory[self.cpu_registers['sp']]
 
-        if operation == 0x00FB:
-            self.screen.scroll_screen_right()
+        if cpu_operation == ADDRESS_9:
+            self.cpu_screen.scroll_screen_right()
 
-        if operation == 0x00FC:
-            self.screen.scroll_screen_left()
+        if cpu_operation == ADDRESS_10:
+            self.cpu_screen.scroll_screen_left()
 
-        if operation == 0x00FD:
+        if cpu_operation == ADDRESS_11:
             pass
 
-        if operation == 0x00FE:
-            self.screen.set_screen_normal()
-            self.mode = MODE_NORMAL
+        if cpu_operation == ADDRESS_12:
+            self.cpu_screen.set_screen_normal()
+            self.cpu_mode = MODE_NORMAL
 
-        if operation == 0x00FF:
-            self.screen.set_screen_extended()
-            self.mode = MODE_EXTENDED
+        if cpu_operation == ADDRESS_2:
+            self.cpu_screen.set_screen_extended()
+            self.cpu_mode = MODE_EXTENDED
 
-    def jump_to_address(self):
+    def cpu_jump_to_address(self):
         """
         1nnn - JUMP nnn
 
@@ -297,9 +288,9 @@ class Chip8CPU(object):
            Bits:  15-12    11-8      7-4      3-0
                   unused  address  address  address
         """
-        self.registers['pc'] = self.operand & 0x0FFF
+        self.cpu_registers['pc'] = self.cpu_operand & ADDRESS_13
 
-    def jump_to_subroutine(self):
+    def cpu_jump_to_subroutine(self):
         """
         2nnn - CALL nnn
 
@@ -309,13 +300,13 @@ class Chip8CPU(object):
            Bits:  15-12    11-8      7-4      3-0
                   unused  address  address  address
         """
-        self.memory[self.registers['sp']] = self.registers['pc'] & 0x00FF
-        self.registers['sp'] += 1
-        self.memory[self.registers['sp']] = (self.registers['pc'] & 0xFF00) >> 8
-        self.registers['sp'] += 1
-        self.registers['pc'] = self.operand & 0x0FFF
+        self.cpu_memory[self.cpu_registers['sp']] = self.cpu_registers['pc'] & ADDRESS_2
+        self.cpu_registers['sp'] += 1
+        self.cpu_memory[self.cpu_registers['sp']] = (self.cpu_registers['pc'] & ADDRESS_14) >> 8
+        self.cpu_registers['sp'] += 1
+        self.cpu_registers['pc'] = self.cpu_operand & ADDRESS_13
 
-    def skip_if_reg_equal_val(self):
+    def cpu_skip_if_reg_equal_val(self):
         """
         3snn - SKE Vs, nn
 
@@ -328,11 +319,11 @@ class Chip8CPU(object):
         The program counter is updated to skip the next instruction by
         advancing it by 2 bytes.
         """
-        source = (self.operand & 0x0F00) >> 8
-        if self.registers['v'][source] == (self.operand & 0x00FF):
-            self.registers['pc'] += 2
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        if self.cpu_registers['v'][cpu_source] == (self.cpu_operand & ADDRESS_2):
+            self.cpu_registers['pc'] += 2
 
-    def skip_if_reg_not_equal_val(self):
+    def cpu_skip_if_reg_not_equal_val(self):
         """
         4snn - SKNE Vs, nn
 
@@ -345,11 +336,11 @@ class Chip8CPU(object):
         The program counter is updated to skip the next instruction by
         advancing it by 2 bytes.
         """
-        source = (self.operand & 0x0F00) >> 8
-        if self.registers['v'][source] != (self.operand & 0x00FF):
-            self.registers['pc'] += 2
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        if self.cpu_registers['v'][cpu_source] != (self.cpu_operand & ADDRESS_2):
+            self.cpu_registers['pc'] += 2
 
-    def skip_if_reg_equal_reg(self):
+    def cpu_skip_if_reg_equal_reg(self):
         """
         5st0 - SKE Vs, Vt
 
@@ -362,12 +353,12 @@ class Chip8CPU(object):
         The program counter is updated to skip the next instruction by
         advancing it by 2 bytes.
         """
-        source = (self.operand & 0x0F00) >> 8
-        target = (self.operand & 0x00F0) >> 4
-        if self.registers['v'][source] == self.registers['v'][target]:
-            self.registers['pc'] += 2
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_target = (self.cpu_operand & ADDRESS_4) >> 4
+        if self.cpu_registers['v'][cpu_source] == self.cpu_registers['v'][cpu_target]:
+            self.cpu_registers['pc'] += 2
 
-    def move_value_to_reg(self):
+    def cpu_move_value_to_reg(self):
         """
         6snn - LOAD Vs, nn
 
@@ -377,10 +368,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    value     value
         """
-        target = (self.operand & 0x0F00) >> 8
-        self.registers['v'][target] = self.operand & 0x00FF
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['v'][cpu_target] = self.cpu_operand & ADDRESS_2
 
-    def add_value_to_reg(self):
+    def cpu_add_value_to_reg(self):
         """
         7snn - ADD Vs, nn
 
@@ -390,11 +381,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    value     value
         """
-        target = (self.operand & 0x0F00) >> 8
-        temp = self.registers['v'][target] + (self.operand & 0x00FF)
-        self.registers['v'][target] = temp if temp < 256 else temp - 256
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        temp = self.cpu_registers['v'][cpu_target] + (self.cpu_operand & ADDRESS_2)
+        self.cpu_registers['v'][cpu_target] = temp if temp < 256 else temp - 256
 
-    def move_reg_into_reg(self):
+    def cpu_move_reg_into_reg(self):
         """
         8st0 - LOAD Vs, Vt
 
@@ -405,11 +396,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    source      0
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        self.registers['v'][target] = self.registers['v'][source]
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        self.cpu_registers['v'][cpu_target] = self.cpu_registers['v'][cpu_source]
 
-    def logical_or(self):
+    def cpu_logical_or(self):
         """
         8ts1 - OR   Vs, Vt
 
@@ -420,11 +411,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    source      1
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        self.registers['v'][target] |= self.registers['v'][source]
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        self.cpu_registers['v'][cpu_target] |= self.cpu_registers['v'][cpu_source]
 
-    def logical_and(self):
+    def cpu_logical_and(self):
         """
         8ts2 - AND  Vs, Vt
 
@@ -435,11 +426,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    source      2
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        self.registers['v'][target] &= self.registers['v'][source]
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        self.cpu_registers['v'][cpu_target] &= self.cpu_registers['v'][cpu_source]
 
-    def exclusive_or(self):
+    def cpu_exclusive_or(self):
         """
         8ts3 - XOR  Vs, Vt
 
@@ -450,11 +441,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   target    source      3
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        self.registers['v'][target] ^= self.registers['v'][source]
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        self.cpu_registers['v'][cpu_target] ^= self.cpu_registers['v'][cpu_source]
 
-    def add_reg_to_reg(self):
+    def cpu_add_reg_to_reg(self):
         """
         8ts4 - ADD  Vt, Vs
 
@@ -467,17 +458,17 @@ class Chip8CPU(object):
 
         If a carry is generated, set a carry flag in register VF.
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        temp = self.registers['v'][target] + self.registers['v'][source]
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        temp = self.cpu_registers['v'][cpu_target] + self.cpu_registers['v'][cpu_source]
         if temp > 255:
-            self.registers['v'][target] = temp - 256
-            self.registers['v'][0xF] = 1
+            self.cpu_registers['v'][cpu_target] = temp - 256
+            self.cpu_registers['v'][0xF] = 1
         else:
-            self.registers['v'][target] = temp
-            self.registers['v'][0xF] = 0
+            self.cpu_registers['v'][cpu_target] = temp
+            self.cpu_registers['v'][0xF] = 0
 
-    def subtract_reg_from_reg(self):
+    def cpu_subtract_reg_from_reg(self):
         """
         8ts5 - SUB  Vt, Vs
 
@@ -490,19 +481,19 @@ class Chip8CPU(object):
 
         If a borrow is NOT generated, set a carry flag in register VF.
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        source_reg = self.registers['v'][source]
-        target_reg = self.registers['v'][target]
-        if target_reg > source_reg:
-            target_reg -= source_reg
-            self.registers['v'][0xF] = 1
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        cpu_source_reg = self.cpu_registers['v'][cpu_source]
+        cpu_target_reg = self.cpu_registers['v'][cpu_target]
+        if cpu_target_reg > cpu_source_reg:
+            cpu_target_reg -= cpu_source_reg
+            self.cpu_registers['v'][0xF] = 1
         else:
-            target_reg = 256 + target_reg - source_reg
-            self.registers['v'][0xF] = 0
-        self.registers['v'][target] = target_reg
+            cpu_target_reg = 256 + cpu_target_reg - cpu_source_reg
+            self.cpu_registers['v'][0xF] = 0
+        self.cpu_registers['v'][cpu_target] = cpu_target_reg
 
-    def right_shift_reg(self):
+    def cpu_right_shift_reg(self):
         """
         8s06 - SHR  Vs
 
@@ -513,12 +504,12 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   source      0         6
         """
-        source = (self.operand & 0x0F00) >> 8
-        bit_zero = self.registers['v'][source] & 0x1
-        self.registers['v'][source] = self.registers['v'][source] >> 1
-        self.registers['v'][0xF] = bit_zero
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_bit_zero = self.cpu_registers['v'][cpu_source] & 0x1
+        self.cpu_registers['v'][cpu_source] = self.cpu_registers['v'][cpu_source] >> 1
+        self.cpu_registers['v'][0xF] = cpu_bit_zero
 
-    def subtract_reg_from_reg1(self):
+    def cpu_subtract_reg_from_reg1(self):
         """
         8ts7 - SUBN Vt, Vs
 
@@ -531,19 +522,19 @@ class Chip8CPU(object):
 
         If a borrow is NOT generated, set a carry flag in register VF.
         """
-        target = (self.operand & 0x0F00) >> 8
-        source = (self.operand & 0x00F0) >> 4
-        source_reg = self.registers['v'][source]
-        target_reg = self.registers['v'][target]
-        if source_reg > target_reg:
-            target_reg = source_reg - target_reg
-            self.registers['v'][0xF] = 1
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_source = (self.cpu_operand & ADDRESS_4) >> 4
+        cpu_source_reg = self.cpu_registers['v'][cpu_source]
+        cpu_target_reg = self.cpu_registers['v'][cpu_target]
+        if cpu_source_reg > cpu_target_reg:
+            cpu_target_reg = cpu_source_reg - cpu_target_reg
+            self.cpu_registers['v'][0xF] = 1
         else:
-            target_reg = 256 + source_reg - target_reg
-            self.registers['v'][0xF] = 0
-        self.registers['v'][target] = target_reg
+            cpu_target_reg = 256 + cpu_source_reg - cpu_target_reg
+            self.cpu_registers['v'][0xF] = 0
+        self.cpu_registers['v'][cpu_target] = cpu_target_reg
 
-    def left_shift_reg(self):
+    def cpu_left_shift_reg(self):
         """
         8s0E - SHL  Vs
 
@@ -554,12 +545,12 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   source      0         E
         """
-        source = (self.operand & 0x0F00) >> 8
-        bit_seven = (self.registers['v'][source] & 0x80) >> 8
-        self.registers['v'][source] = self.registers['v'][source] << 1
-        self.registers['v'][0xF] = bit_seven
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_bit_seven = (self.cpu_registers['v'][cpu_source] & 0x80) >> 8
+        self.cpu_registers['v'][cpu_source] = self.cpu_registers['v'][cpu_source] << 1
+        self.cpu_registers['v'][0xF] = cpu_bit_seven
 
-    def skip_if_reg_not_equal_reg(self):
+    def cpu_skip_if_reg_not_equal_reg(self):
         """
         9st0 - SKNE Vs, Vt
 
@@ -572,12 +563,12 @@ class Chip8CPU(object):
         The program counter is updated to skip the next instruction by
         advancing it by 2 bytes.
         """
-        source = (self.operand & 0x0F00) >> 8
-        target = (self.operand & 0x00F0) >> 4
-        if self.registers['v'][source] != self.registers['v'][target]:
-            self.registers['pc'] += 2
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_target = (self.cpu_operand & ADDRESS_4) >> 4
+        if self.cpu_registers['v'][cpu_source] != self.cpu_registers['v'][cpu_target]:
+            self.cpu_registers['pc'] += 2
 
-    def load_index_reg_with_value(self):
+    def cpu_load_index_reg_with_value(self):
         """
         Annn - LOAD I, nnn
 
@@ -587,9 +578,9 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   constant  constant  constant
         """
-        self.registers['index'] = self.operand & 0x0FFF
+        self.cpu_registers['index'] = self.cpu_operand & ADDRESS_13
 
-    def jump_to_index_plus_value(self):
+    def cpu_jump_to_index_plus_value(self):
         """
         Bnnn - JUMP [I] + nnn
 
@@ -600,9 +591,9 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused   address  address  address
         """
-        self.registers['pc'] = self.registers['index'] + (self.operand & 0x0FFF)
+        self.cpu_registers['pc'] = self.cpu_registers['index'] + (self.cpu_operand & ADDRESS_13)
 
-    def generate_random_number(self):
+    def cpu_generate_random_number(self):
         """
         Ctnn - RAND Vt, nn
 
@@ -614,11 +605,11 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    target    value    value
         """
-        value = self.operand & 0x00FF
-        target = (self.operand & 0x0F00) >> 8
-        self.registers['v'][target] = value & randint(0, 255)
+        cpu_value = self.cpu_operand & ADDRESS_2
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['v'][cpu_target] = cpu_value & randint(0, 255)
 
-    def draw_sprite(self):
+    def cpu_draw_sprite(self):
         """
         Dxyn - DRAW x, y, num_bytes
 
@@ -652,19 +643,19 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    x_source  y_source  num_bytes
         """
-        x_source = (self.operand & 0x0F00) >> 8
-        y_source = (self.operand & 0x00F0) >> 4
-        x_pos = self.registers['v'][x_source]
-        y_pos = self.registers['v'][y_source]
-        num_bytes = self.operand & 0x000F
-        self.registers['v'][0xF] = 0
+        cpu_x_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_y_source = (self.cpu_operand & ADDRESS_4) >> 4
+        cpu_x_pos = self.cpu_registers['v'][cpu_x_source]
+        cpu_y_pos = self.cpu_registers['v'][cpu_y_source]
+        cpu_num_bytes = self.cpu_operand & ADDRESS_6
+        self.cpu_registers['v'][0xF] = 0
 
-        if self.mode == MODE_EXTENDED and num_bytes == 0:
-            self.draw_extended(x_pos, y_pos, 16)
+        if self.cpu_mode == MODE_EXTENDED and cpu_num_bytes == 0:
+            self.cpu_draw_extended(cpu_x_pos, cpu_y_pos, 16)
         else:
-            self.draw_normal(x_pos, y_pos, num_bytes)
+            self.cpu_draw_normal(cpu_x_pos, cpu_y_pos, cpu_num_bytes)
 
-    def draw_normal(self, x_pos, y_pos, num_bytes):
+    def cpu_draw_normal(self, cpu_x_pos, cpu_y_pos, cpu_num_bytes):
         """
         Draws a sprite on the screen while in NORMAL mode.
         
@@ -672,33 +663,33 @@ class Chip8CPU(object):
         :param y_pos: the Y position of the sprite
         :param num_bytes: the number of bytes to draw
         """
-        for y_index in xrange(num_bytes):
+        for cpu_y_index in xrange(cpu_num_bytes):
 
-            color_byte = bin(self.memory[self.registers['index'] + y_index])
-            color_byte = color_byte[2:].zfill(8)
-            y_coord = y_pos + y_index
-            y_coord = y_coord % self.screen.screen_height
+            cpu_color_byte = bin(self.cpu_memory[self.cpu_registers['index'] + cpu_y_index])
+            cpu_color_byte = cpu_color_byte[2:].zfill(8)
+            cpu_y_coord = cpu_y_pos + cpu_y_index
+            cpu_y_coord = cpu_y_coord % self.cpu_screen.screen_height
 
-            for x_index in xrange(8):
+            for cpu_x_index in xrange(8):
 
-                x_coord = x_pos + x_index
-                x_coord = x_coord % self.screen.screen_width
+                cpu_x_coord = cpu_x_pos + cpu_x_index
+                cpu_x_coord = cpu_x_coord % self.cpu_screen.screen_width
 
-                color = int(color_byte[x_index])
-                current_color = self.screen.get_screen_pixel(x_coord, y_coord)
+                cpu_color = int(cpu_color_byte[cpu_x_index])
+                cpu_current_color = self.cpu_screen.get_screen_pixel(cpu_x_coord, cpu_y_coord)
 
-                if color == 1 and current_color == 1:
-                    self.registers['v'][0xF] = self.registers['v'][0xF] | 1
-                    color = 0
+                if cpu_color == 1 and cpu_current_color == 1:
+                    self.cpu_registers['v'][0xF] = self.cpu_registers['v'][0xF] | 1
+                    cpu_color = 0
 
-                elif color == 0 and current_color == 1:
-                    color = 1
+                elif cpu_color == 0 and cpu_current_color == 1:
+                    cpu_color = 1
 
-                self.screen.draw_screen_pixel(x_coord, y_coord, color)
+                self.cpu_screen.draw_screen_pixel(cpu_x_coord, cpu_y_coord, cpu_color)
 
-        self.screen.update_screen()
+        self.cpu_screen.update_screen()
 
-    def draw_extended(self, x_pos, y_pos, num_bytes):
+    def cpu_draw_extended(self, cpu_x_pos, cpu_y_pos, cpu_num_bytes):
         """
         Draws a sprite on the screen while in EXTENDED mode. Sprites in this
         mode are assumed to be 16x16 pixels. This means that two bytes will
@@ -709,35 +700,35 @@ class Chip8CPU(object):
         :param y_pos: the Y position of the sprite
         :param num_bytes: the number of bytes to draw
         """
-        for y_index in xrange(num_bytes):
+        for cpu_y_index in xrange(cpu_num_bytes):
 
-            for x_byte in xrange(2):
+            for cpu_x_byte in xrange(2):
 
-                color_byte = bin(self.memory[self.registers['index'] + (y_index * 2) + x_byte])
-                color_byte = color_byte[2:].zfill(8)
-                y_coord = y_pos + y_index
-                y_coord = y_coord % self.screen.screen_height
+                cpu_color_byte = bin(self.cpu_memory[self.cpu_registers['index'] + (cpu_y_index * 2) + cpu_x_byte])
+                cpu_color_byte = cpu_color_byte[2:].zfill(8)
+                cpu_y_coord = cpu_y_pos + cpu_y_index
+                cpu_y_coord = cpu_y_coord % self.cpu_screen.screen_height
 
-                for x_index in range(8):
+                for cpu_x_index in range(8):
 
-                    x_coord = x_pos + x_index + (x_byte * 8)
-                    x_coord = x_coord % self.screen.screen_width
+                    cpu_x_coord = cpu_x_pos + cpu_x_index + (cpu_x_byte * 8)
+                    cpu_x_coord = cpu_x_coord % self.cpu_screen.screen_width
 
-                    color = int(color_byte[x_index])
-                    current_color = self.screen.get_screen_pixel(x_coord, y_coord)
+                    cpu_color = int(cpu_color_byte[cpu_x_index])
+                    cpu_current_color = self.cpu_screen.get_screen_pixel(cpu_x_coord, cpu_y_coord)
 
-                    if color == 1 and current_color == 1:
-                        self.registers['v'][0xF] = 1
-                        color = 0
+                    if cpu_color == 1 and cpu_current_color == 1:
+                        self.cpu_registers['v'][0xF] = 1
+                        cpu_color = 0
 
-                    elif color == 0 and current_color == 1:
-                        color = 1
+                    elif cpu_color == 0 and cpu_current_color == 1:
+                        cpu_color = 1
 
-                    self.screen.draw_screen_pixel(x_coord, y_coord, color)
+                    self.cpu_screen.draw_screen_pixel(cpu_x_coord, cpu_y_coord, cpu_color)
 
-        self.screen.update_screen()
+        self.cpu_screen.update_screen()
 
-    def move_delay_timer_into_reg(self):
+    def cpu_move_delay_timer_into_reg(self):
         """
         Ft07 - LOAD Vt, DELAY
 
@@ -747,10 +738,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    target     0         7
         """
-        target = (self.operand & 0x0F00) >> 8
-        self.registers['v'][target] = self.timers['delay']
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['v'][cpu_target] = self.cpu_timers['delay']
 
-    def wait_for_keypress(self):
+    def cpu_wait_for_keypress(self):
         """
         Ft0A - KEYD Vt
 
@@ -761,19 +752,19 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    target     0         A
         """
-        target = (self.operand & 0x0F00) >> 8
-        key_pressed = False
-        while not key_pressed:
-            event = pygame.event.wait()
-            if event.type == pygame.KEYDOWN:
-                keys_pressed = key.get_pressed()
-                for keyval, lookup_key in KEY_MAPPINGS.items():
-                    if keys_pressed[lookup_key]:
-                        self.registers['v'][target] = keyval
-                        key_pressed = True
+        cpu_target = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_key_pressed = False
+        while not cpu_key_pressed:
+            cpu_event = pygame.event.wait()
+            if cpu_event.type == pygame.KEYDOWN:
+                cpu_keys_pressed = key.get_pressed()
+                for cpu_keyval, cpu_lookup_key in KEY_MAPPINGS.items():
+                    if cpu_keys_pressed[cpu_lookup_key]:
+                        self.cpu_registers['v'][cpu_target] = cpu_keyval
+                        cpu_key_pressed = True
                         break
 
-    def move_reg_into_delay_timer(self):
+    def cpu_move_reg_into_delay_timer(self):
         """
         Fs15 - LOAD DELAY, Vs
 
@@ -783,10 +774,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     1         5
         """
-        source = (self.operand & 0x0F00) >> 8
-        self.timers['delay'] = self.registers['v'][source]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_timers['delay'] = self.cpu_registers['v'][cpu_source]
 
-    def move_reg_into_sound_timer(self):
+    def cpu_move_reg_into_sound_timer(self):
         """
         Fs18 - LOAD SOUND, Vs
 
@@ -796,10 +787,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     1         8
         """
-        source = (self.operand & 0x0F00) >> 8
-        self.timers['sound'] = self.registers['v'][source]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_timers['sound'] = self.cpu_registers['v'][cpu_source]
 
-    def load_index_with_reg_sprite(self):
+    def cpu_load_index_with_reg_sprite(self):
         """
         Fs29 - LOAD I, Vs
 
@@ -811,10 +802,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     2         9
         """
-        source = (self.operand & 0x0F00) >> 8
-        self.registers['index'] = self.registers['v'][source] * 5
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['index'] = self.cpu_registers['v'][cpu_source] * 5
 
-    def load_index_with_extended_reg_sprite(self):
+    def cpu_load_index_with_extended_reg_sprite(self):
         """
         Fs30 - LOAD I, Vs
 
@@ -826,10 +817,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     2         9
         """
-        source = (self.operand & 0x0F00) >> 8
-        self.registers['index'] = self.registers['v'][source] * 10
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['index'] = self.cpu_registers['v'][cpu_source] * 10
 
-    def add_reg_into_index(self):
+    def cpu_add_reg_into_index(self):
         """
         Fs1E - ADD  I, Vs
 
@@ -839,10 +830,10 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     1         E
         """
-        source = (self.operand & 0x0F00) >> 8
-        self.registers['index'] += self.registers['v'][source]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        self.cpu_registers['index'] += self.cpu_registers['v'][cpu_source]
 
-    def store_bcd_in_memory(self):
+    def cpu_store_bcd_in_memory(self):
         """
         Fs33 - BCD
 
@@ -865,13 +856,13 @@ class Chip8CPU(object):
            Bits:  15-12     11-8      7-4       3-0
                   unused    source     3         3
         """
-        source = (self.operand & 0x0F00) >> 8
-        bcd_value = '{:03d}'.format(self.registers['v'][source])
-        self.memory[self.registers['index']] = int(bcd_value[0])
-        self.memory[self.registers['index'] + 1] = int(bcd_value[1])
-        self.memory[self.registers['index'] + 2] = int(bcd_value[2])
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        cpu_bcd_value = '{:03d}'.format(self.cpu_registers['v'][cpu_source])
+        self.cpu_memory[self.cpu_registers['index']] = int(cpu_bcd_value[0])
+        self.cpu_memory[self.cpu_registers['index'] + 1] = int(cpu_bcd_value[1])
+        self.cpu_memory[self.cpu_registers['index'] + 2] = int(cpu_bcd_value[2])
 
-    def store_regs_in_memory(self):
+    def cpu_store_regs_in_memory(self):
         """
         Fs55 - STOR [I], Vs
 
@@ -885,12 +876,12 @@ class Chip8CPU(object):
         For example, to store all of the V registers, the source register
         would contain the value 'F'.
         """
-        source = (self.operand & 0x0F00) >> 8
-        for counter in range(source + 1):
-            self.memory[self.registers['index'] + counter] = \
-                    self.registers['v'][counter]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        for cpu_counter in range(cpu_source + 1):
+            self.cpu_memory[self.cpu_registers['index'] + cpu_counter] = \
+                    self.cpu_registers['v'][cpu_counter]
 
-    def read_regs_from_memory(self):
+    def cpu_read_regs_from_memory(self):
         """
         Fs65 - LOAD Vs, [I]
 
@@ -904,12 +895,12 @@ class Chip8CPU(object):
         example, to load all of the V registers, the source register would
         contain the value 'F'.
         """
-        source = (self.operand & 0x0F00) >> 8
-        for counter in range(source + 1):
-            self.registers['v'][counter] = \
-                    self.memory[self.registers['index'] + counter]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        for cpu_counter in range(cpu_source + 1):
+            self.cpu_registers['v'][cpu_counter] = \
+                    self.cpu_memory[self.cpu_registers['index'] + cpu_counter]
 
-    def store_regs_in_rpl(self):
+    def cpu_store_regs_in_rpl(self):
         """
         Fs75 - SRPL Vs
 
@@ -922,11 +913,11 @@ class Chip8CPU(object):
         For example, to store all of the V registers, the source register
         would contain the value 'F'.
         """
-        source = (self.operand & 0x0F00) >> 8
-        for counter in range(source + 1):
-            self.registers['rpl'][counter] = self.registers['v'][counter]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        for cpu_counter in range(cpu_source + 1):
+            self.cpu_registers['rpl'][cpu_counter] = self.cpu_registers['v'][cpu_counter]
 
-    def read_regs_from_rpl(self):
+    def cpu_read_regs_from_rpl(self):
         """
         Fs85 - LRPL Vs
 
@@ -939,24 +930,24 @@ class Chip8CPU(object):
         example, to load all of the V registers, the source register would
         contain the value 'F'.
         """
-        source = (self.operand & 0x0F00) >> 8
-        for counter in range(source + 1):
-            self.registers['v'][counter] = self.registers['rpl'][counter]
+        cpu_source = (self.cpu_operand & ADDRESS_3) >> 8
+        for cpu_counter in range(cpu_source + 1):
+            self.cpu_registers['v'][cpu_counter] = self.cpu_registers['rpl'][cpu_counter]
 
-    def reset(self):
+    def cpu_reset(self):
         """
         Reset the CPU by blanking out all registers, and reseting the stack
         pointer and program counter to their starting values.
         """
-        self.registers['v'] = [0] * NUM_REGISTERS
-        self.registers['pc'] = PROGRAM_COUNTER_START
-        self.registers['sp'] = STACK_POINTER_START
-        self.registers['index'] = 0
-        self.registers['rpl'] = [0] * NUM_REGISTERS
-        self.timers['delay'] = 0
-        self.timers['sound'] = 0
+        self.cpu_registers['v'] = [0] * NUM_REGISTERS
+        self.cpu_registers['pc'] = PROGRAM_COUNTER_START
+        self.cpu_registers['sp'] = STACK_POINTER_START
+        self.cpu_registers['index'] = 0
+        self.cpu_registers['rpl'] = [0] * NUM_REGISTERS
+        self.cpu_timers['delay'] = 0
+        self.cpu_timers['sound'] = 0
 
-    def load_rom(self, filename, offset=PROGRAM_COUNTER_START):
+    def cpu_load_rom(self, filename, cpu_offset=PROGRAM_COUNTER_START):
         """
         Load the ROM indicated by the filename into memory.
 
@@ -966,22 +957,16 @@ class Chip8CPU(object):
         @param offset: the location in memory at which to load the ROM
         @type offset: integer
         """
-        romdata = open(filename, 'rb').read()
-        for index, val in enumerate(romdata):
-            self.memory[offset + index] = val
+        cpu_romdata = open(filename, 'rb').read()
+        for cpu_index, cpu_val in enumerate(cpu_romdata):
+            self.cpu_memory[cpu_offset + cpu_index] = cpu_val
 
-    def decrement_timers(self):
+    def cpu_decrement_timers(self):
         """
         Decrement both the sound and delay timer.
         """
-        if self.timers['delay'] != 0:
-            self.timers['delay'] -= 1
+        if self.cpu_timers['delay'] != 0:
+            self.cpu_timers['delay'] -= 1
 
-        if self.timers['sound'] != 0:
-            self.timers['sound'] -= 1
-
-
-
-
-
-# E N D   O F   F I L E ########################################################
+        if self.cpu_timers['sound'] != 0:
+            self.cpu_timers['sound'] -= 1
