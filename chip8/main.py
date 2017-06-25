@@ -9,7 +9,6 @@ A simple Chip 8 emulator - see the README file for more information.
 import argparse
 import pygame
 
-from config import FONT_FILE, DELAY_INTERVAL
 from cpu import Chip8CPU
 from screen import Chip8Screen
 
@@ -17,6 +16,10 @@ from screen import Chip8Screen
 
 # A simple timer event used for the delay and sound timers
 TIMER = pygame.USEREVENT + 1
+# The font file to use
+FONT_FILE = "FONTS.chip8"
+# Delay timer decrement interval (in ms)
+DELAY_INTERVAL = 17
 
 # F U N C T I O N S  ##########################################################
 

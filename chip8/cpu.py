@@ -11,9 +11,34 @@ import pygame
 from pygame import key
 from random import randint
 
-from config import (
-    MAX_MEMORY, STACK_POINTER_START, KEY_MAPPINGS, PROGRAM_COUNTER_START
-)
+# The total amount of memory to allocate for the emulator
+MAX_MEMORY = 4096
+
+# Where the stack pointer should originally point
+STACK_POINTER_START = 0x52
+
+# Where the program counter should originally point
+PROGRAM_COUNTER_START = 0x200
+
+# Sets which keys on the keyboard map to the Chip 8 keys
+KEY_MAPPINGS = {
+    0x0: pygame.K_KP0,
+    0x1: pygame.K_KP1,
+    0x2: pygame.K_KP2,
+    0x3: pygame.K_KP3,
+    0x4: pygame.K_KP4,
+    0x5: pygame.K_KP5,
+    0x6: pygame.K_KP6,
+    0x7: pygame.K_KP7,
+    0x8: pygame.K_KP8,
+    0x9: pygame.K_KP9,
+    0xA: pygame.K_a,
+    0xB: pygame.K_b,
+    0xC: pygame.K_c,
+    0xD: pygame.K_d,
+    0xE: pygame.K_e,
+    0xF: pygame.K_f,
+}
 
 # C O N S T A N T S ###########################################################
 
@@ -163,7 +188,7 @@ class Chip8CPU(object):
             self.operand = operand
         else:
             self.operand = int(self.memory[self.registers['pc']])
-            self.operand = self.operand << 8
+            self.operand <<= 8
             self.operand += int(self.memory[self.registers['pc'] + 1])
             self.registers['pc'] += 2
         operation = (self.operand & 0xF000) >> 12
@@ -248,7 +273,10 @@ class Chip8CPU(object):
             self.screen.clear_screen()
 
         if operation == 0x00EE:
-            self.return_from_subroutine()
+            self.registers['sp'] -= 1
+            self.registers['pc'] = self.memory[self.registers['sp']] << 8
+            self.registers['sp'] -= 1
+            self.registers['pc'] += self.memory[self.registers['sp']]
 
         if operation == 0x00FB:
             self.screen.scroll_right()
@@ -260,22 +288,12 @@ class Chip8CPU(object):
             pass
 
         if operation == 0x00FE:
-            self.disable_extended_mode()
+            self.screen.set_normal()
+            self.mode = MODE_NORMAL
 
         if operation == 0x00FF:
-            self.enable_extended_mode()
-
-    def return_from_subroutine(self):
-        """
-        00EE - RTS
-
-        Return from subroutine. Pop the current value in the stack pointer
-        off of the stack, and set the program counter to the value popped.
-        """
-        self.registers['sp'] -= 1
-        self.registers['pc'] = self.memory[self.registers['sp']] << 8
-        self.registers['sp'] -= 1
-        self.registers['pc'] += self.memory[self.registers['sp']]
+            self.screen.set_extended()
+            self.mode = MODE_EXTENDED
 
     def jump_to_address(self):
         """
@@ -970,18 +988,8 @@ class Chip8CPU(object):
         if self.timers['sound'] != 0:
             self.timers['sound'] -= 1
 
-    def enable_extended_mode(self):
-        """
-        Set extended mode.
-        """
-        self.screen.set_extended()
-        self.mode = MODE_EXTENDED
 
-    def disable_extended_mode(self):
-        """
-        Disables extended mode.
-        """
-        self.screen.set_normal()
-        self.mode = MODE_NORMAL
+
+
 
 # E N D   O F   F I L E ########################################################
