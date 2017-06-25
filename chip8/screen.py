@@ -78,7 +78,7 @@ class Chip8Screen(object):
             HWSURFACE | DOUBLEBUF,
             SCREEN_DEPTH)
         display.set_caption('CHIP8 Emulator')
-        self.clear_screen()
+        self.surface.fill(PIXEL_COLORS[0])
         self.update()
 
     def draw_pixel(self, x_pos, y_pos, pixel_color):
@@ -133,34 +133,11 @@ class Chip8Screen(object):
         """
         display.flip()
 
-    def get_width(self):
-        """
-        Returns the current value of the screen width.
-
-        :return: the width of the screen
-        """
-        return self.width
-
-    def get_height(self):
-        """
-        Returns the current value of the screen height.
-
-        :return: the height of the screen
-        """
-        return self.height
-
-    @staticmethod
-    def destroy():
-        """
-        Destroys the current screen object.
-        """
-        display.quit()
-
     def set_extended(self):
         """
         Sets the screen mode to extended.
         """
-        self.destroy()
+        display.quit()
         self.height = SCREEN_HEIGHT[SCREEN_MODE_EXTENDED]
         self.width = SCREEN_WIDTH[SCREEN_MODE_EXTENDED]
         self.init_display()
@@ -169,7 +146,7 @@ class Chip8Screen(object):
         """
         Sets the screen mode to normal.
         """
-        self.destroy()
+        display.quit()
         self.height = SCREEN_HEIGHT[SCREEN_MODE_NORMAL]
         self.width = SCREEN_WIDTH[SCREEN_MODE_NORMAL]
         self.init_display()

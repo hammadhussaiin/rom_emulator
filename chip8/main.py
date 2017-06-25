@@ -24,28 +24,6 @@ DELAY_INTERVAL = 17
 # F U N C T I O N S  ##########################################################
 
 
-def parse_arguments():
-    """
-    Parses the command-line arguments passed to the emulator.
-
-    :return: the parsed command-line arguments
-    """
-    parser = argparse.ArgumentParser(
-        description="Starts a simple Chip 8 "
-        "emulator. See README.md for more information, and LICENSE for "
-        "terms of use.")
-    parser.add_argument(
-        "rom", help="the ROM file to load on startup")
-    parser.add_argument(
-        "-s", help="the scale factor to apply to the display "
-        "(default is 5)", type=int, default=5, dest="scale")
-    parser.add_argument(
-        "-d", help="sets the CPU operation to take at least "
-        "the specified number of milliseconds to execute (default is 1)",
-        type=int, default=1, dest="op_delay")
-    return parser.parse_args()
-
-
 def main_loop(args):
     """
     Runs the main emulator loop with the specified arguments.
@@ -82,6 +60,19 @@ def main_loop(args):
 # M A I N #####################################################################
 
 if __name__ == "__main__":
-    main_loop(parse_arguments())
+    parser = argparse.ArgumentParser(
+        description="Starts a simple Chip 8 "
+                    "emulator. See README.md for more information, and LICENSE for "
+                    "terms of use.")
+    parser.add_argument(
+        "rom", help="the ROM file to load on startup")
+    parser.add_argument(
+        "-s", help="the scale factor to apply to the display "
+                   "(default is 5)", type=int, default=5, dest="scale")
+    parser.add_argument(
+        "-d", help="sets the CPU operation to take at least "
+                   "the specified number of milliseconds to execute (default is 1)",
+        type=int, default=1, dest="op_delay")
+    main_loop(parser.parse_args())
 
 # E N D   O F   F I L E #######################################################
