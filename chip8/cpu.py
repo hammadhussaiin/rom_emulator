@@ -259,7 +259,7 @@ class Chip8CPU(object):
         sub_operation = operation & 0x00F0
         if sub_operation == 0x00C0:
             num_lines = self.operand & 0x000F
-            self.screen.scroll_down(num_lines)
+            self.screen.scroll_screen_down(num_lines)
 
         if operation == 0x00E0:
             self.screen.clear_screen()
@@ -271,20 +271,20 @@ class Chip8CPU(object):
             self.registers['pc'] += self.memory[self.registers['sp']]
 
         if operation == 0x00FB:
-            self.screen.scroll_right()
+            self.screen.scroll_screen_right()
 
         if operation == 0x00FC:
-            self.screen.scroll_left()
+            self.screen.scroll_screen_left()
 
         if operation == 0x00FD:
             pass
 
         if operation == 0x00FE:
-            self.screen.set_normal()
+            self.screen.set_screen_normal()
             self.mode = MODE_NORMAL
 
         if operation == 0x00FF:
-            self.screen.set_extended()
+            self.screen.set_screen_extended()
             self.mode = MODE_EXTENDED
 
     def jump_to_address(self):
@@ -677,15 +677,15 @@ class Chip8CPU(object):
             color_byte = bin(self.memory[self.registers['index'] + y_index])
             color_byte = color_byte[2:].zfill(8)
             y_coord = y_pos + y_index
-            y_coord = y_coord % self.screen.height
+            y_coord = y_coord % self.screen.screen_height
 
             for x_index in xrange(8):
 
                 x_coord = x_pos + x_index
-                x_coord = x_coord % self.screen.width
+                x_coord = x_coord % self.screen.screen_width
 
                 color = int(color_byte[x_index])
-                current_color = self.screen.get_pixel(x_coord, y_coord)
+                current_color = self.screen.get_screen_pixel(x_coord, y_coord)
 
                 if color == 1 and current_color == 1:
                     self.registers['v'][0xF] = self.registers['v'][0xF] | 1
@@ -694,9 +694,9 @@ class Chip8CPU(object):
                 elif color == 0 and current_color == 1:
                     color = 1
 
-                self.screen.draw_pixel(x_coord, y_coord, color)
+                self.screen.draw_screen_pixel(x_coord, y_coord, color)
 
-        self.screen.update()
+        self.screen.update_screen()
 
     def draw_extended(self, x_pos, y_pos, num_bytes):
         """
@@ -716,15 +716,15 @@ class Chip8CPU(object):
                 color_byte = bin(self.memory[self.registers['index'] + (y_index * 2) + x_byte])
                 color_byte = color_byte[2:].zfill(8)
                 y_coord = y_pos + y_index
-                y_coord = y_coord % self.screen.height
+                y_coord = y_coord % self.screen.screen_height
 
                 for x_index in range(8):
 
                     x_coord = x_pos + x_index + (x_byte * 8)
-                    x_coord = x_coord % self.screen.width
+                    x_coord = x_coord % self.screen.screen_width
 
                     color = int(color_byte[x_index])
-                    current_color = self.screen.get_pixel(x_coord, y_coord)
+                    current_color = self.screen.get_screen_pixel(x_coord, y_coord)
 
                     if color == 1 and current_color == 1:
                         self.registers['v'][0xF] = 1
@@ -733,9 +733,9 @@ class Chip8CPU(object):
                     elif color == 0 and current_color == 1:
                         color = 1
 
-                    self.screen.draw_pixel(x_coord, y_coord, color)
+                    self.screen.draw_screen_pixel(x_coord, y_coord, color)
 
-        self.screen.update()
+        self.screen.update_screen()
 
     def move_delay_timer_into_reg(self):
         """

@@ -1,18 +1,8 @@
-"""
-Copyright (C) 2012 Craig Thomas
-This project uses an MIT style license - see LICENSE for details.
-
-A simple Chip 8 emulator - see the README file for more information.
-"""
-# I M P O R T S ###############################################################
-
 import argparse
 import pygame
 
 from cpu import Chip8CPU
-from screen import Chip8Screen
-
-# C O N S T A N T S ###########################################################
+from screen import Screen
 
 # A simple timer event used for the delay and sound timers
 TIMER = pygame.USEREVENT + 1
@@ -20,32 +10,31 @@ TIMER = pygame.USEREVENT + 1
 FONT_FILE = "FONTS.chip8"
 # Delay timer decrement interval (in ms)
 DELAY_INTERVAL = 17
+EXIT_STATE = 0x00FD
 
-# F U N C T I O N S  ##########################################################
 
-
-def main_loop(args):
+def screen_cpu_connector(args):
     """
     Runs the main emulator loop with the specified arguments.
 
     :param args: the parsed command-line arguments
     """
-    screen = Chip8Screen(scale_factor=args.scale)
-    screen.init_display()
-    cpu = Chip8CPU(screen)
-    cpu.load_rom(FONT_FILE, 0)
-    cpu.load_rom(args.rom)
+    project_screen = Screen(ratio=args.scale)
+    project_screen.init_display()
+    project_cpu = Chip8CPU(project_screen)
+    project_cpu.load_rom(FONT_FILE, 0)
+    project_cpu.load_rom(args.rom)
     pygame.time.set_timer(TIMER, DELAY_INTERVAL)
     running = True
 
     while running:
         pygame.time.wait(args.op_delay)
-        operand = cpu.execute_instruction()
+        operand = project_cpu.execute_instruction()
 
         # Check for events
         for event in pygame.event.get():
             if event.type == TIMER:
-                cpu.decrement_timers()
+                project_cpu.decrement_timers()
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
@@ -54,16 +43,14 @@ def main_loop(args):
                     running = False
 
         # Check to see if CPU is in exit state
-        if operand == 0x00FD:
+        if operand == EXIT_STATE:
             running = False
 
-# M A I N #####################################################################
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Starts a simple Chip 8 "
-                    "emulator. See README.md for more information, and LICENSE for "
-                    "terms of use.")
+                    )
     parser.add_argument(
         "rom", help="the ROM file to load on startup")
     parser.add_argument(
@@ -73,6 +60,4 @@ if __name__ == "__main__":
         "-d", help="sets the CPU operation to take at least "
                    "the specified number of milliseconds to execute (default is 1)",
         type=int, default=1, dest="op_delay")
-    main_loop(parser.parse_args())
-
-# E N D   O F   F I L E #######################################################
+    screen_cpu_connector(parser.parse_args())
